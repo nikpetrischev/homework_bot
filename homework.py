@@ -19,13 +19,6 @@ from exceptions import (
 
 load_dotenv()
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-stream_handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s')
-stream_handler.setFormatter(formatter)
-logger.addHandler(stream_handler)
-
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
@@ -40,28 +33,13 @@ HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
-    'rejected': 'Работа проверена: у ревьюера есть замечания.'
+    'rejected': 'Работа проверена: у ревьюера есть замечания.',
 }
 
 
-def check_tokens() -> list[str]:
-    """
-    Checking if any of the required tokens is absent.
-    Return list of absent tokens (or empty if it's ok).
-    """
-    # Simple dict to get varnames to each critical token.
-    tokens = dict(
-        PRACTICUM_TOKEN=PRACTICUM_TOKEN,
-        TELEGRAM_TOKEN=TELEGRAM_TOKEN,
-        TELEGRAM_CHAT_ID=TELEGRAM_CHAT_ID,
-    )
-
-    failed_list = []
-    for token_name, token in tokens.items():
-        if not token or token is None:
-            failed_list.append(token_name)
-
-    return failed_list
+def check_tokens() -> bool:
+    """Checking if any of the required tokens is absent."""
+    return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
 def send_message(bot: telegram.Bot, message: str) -> None:
@@ -70,6 +48,7 @@ def send_message(bot: telegram.Bot, message: str) -> None:
     Either raise exception or log in case of success.
     """
     try:
+        logging.debug('Trying to send message.')
         bot.send_message(
             chat_id=TELEGRAM_CHAT_ID,
             text=message,
@@ -79,7 +58,7 @@ def send_message(bot: telegram.Bot, message: str) -> None:
         raise DoNotSendToBotException(f'Unable to send message: {error}')
 
     else:
-        logging.debug(msg='Bot has sent message.')
+        logging.debug(msg='Bot has sent message successfully.')
 
 
 def get_api_answer(timestamp: int) -> dict[str, Any]:
@@ -91,6 +70,7 @@ def get_api_answer(timestamp: int) -> dict[str, Any]:
           from chosen date forward.
     """
     try:
+        logging.debug('Requesting info from API.')
         response = requests.get(
             ENDPOINT,
             headers=HEADERS,
@@ -108,7 +88,6 @@ def get_api_answer(timestamp: int) -> dict[str, Any]:
             homeworks=response_json.get('homeworks'),
             current_date=response_json.get('current_date'),
         )
-        return resulting_dict
 
     except EndpointResponseException as error:
         raise error
@@ -121,6 +100,10 @@ def get_api_answer(timestamp: int) -> dict[str, Any]:
 
     except Exception as error:
         raise Exception(f'Unexpected error: {error}')
+
+    else:
+        logging.debug('API response has been recieved.')
+        return resulting_dict
 
 
 def check_response(response: dict[str, Any]) -> bool:
@@ -188,8 +171,9 @@ def main():
     Check for required tokens, interrupt if at least one is absent.
     Run bot in perma-loop, every RETRY_PERIOD sec ask API for an update.
     """
-    if len(tokens := check_tokens()) > 0:
-        logging.critical(msg=f'Environment var not found: {tokens}')
+    if not check_tokens():
+        logging.critical(msg=('One or more of enviromental vars is missing. '
+                              + 'Make sure that .env is correctly filled'))
         sys.exit()
 
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
@@ -207,7 +191,7 @@ def main():
 
             homeworks = response.get('homeworks')
             if len(homeworks) == 0:
-                logger.debug('No updates in homeworks\' statuses.')
+                logging.debug('No updates in homeworks\' statuses.')
 
             for homework in homeworks:
                 verdict = parse_status(homework)
@@ -222,7 +206,7 @@ def main():
 
         # These errors can be logged as well as sent via bot message.
         except Exception as error:
-            logger.error(f'An error has occured: {type(error).__name__}')
+            logging.error(f'An error has occured: {type(error).__name__}')
             if error != last_error_sent:
                 # Don't want to send same error again and again.
                 last_error_sent = error
@@ -233,4 +217,9 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        handlers=logging.StreamHandler(sys.stdout),
+        format='%(asctime)s [%(levelname)s] %(message)s',
+    )
     main()
