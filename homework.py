@@ -29,7 +29,6 @@ HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 
 # Dict of possible homework\s statuses.
-# Unable to translate because of tests:(
 HOMEWORK_VERDICTS = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
@@ -75,15 +74,12 @@ def get_api_answer(timestamp: int) -> dict[str, Any]:
             ENDPOINT,
             headers=HEADERS,
             params=dict(from_date=timestamp))
-        # Check if endpoint returns not OK.
         if response.status_code != HTTPStatus.OK:
             raise EndpointResponseException(
                 'Endpoint response returned wrong status: '
                 + f'{response.status_code}',
             )
-        # Get json from response.
         response_json = response.json()
-        # Convert it into dictionary
         resulting_dict = dict(
             homeworks=response_json.get('homeworks'),
             current_date=response_json.get('current_date'),
@@ -161,7 +157,6 @@ def parse_status(homework: dict) -> Union[str, None]:
         raise ValueError(f'Unexpected status of homework: {verdict}')
 
     verdict = HOMEWORK_VERDICTS.get(verdict)
-    # Another untranslateable line:(
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
